@@ -1,0 +1,19 @@
+{
+  "name": "pqxx-pool",
+  "version": "1.0.0",
+  "main": "index.js",
+  "gypfile": true,
+  "scripts": {
+    "build": "node-gyp rebuild",
+    "clean": "node-gyp clean"
+  },
+  "author": "Anton Klepnikov",
+  "license": "MIT",
+  "description": "PostgreSQL connection pool for NodeJs (C++ addon)",
+  "devDependencies": {
+    "node-gyp": "^11.3.0"
+  },
+  "dependencies": {
+    "node-addon-api": "^8.5.0"
+  }
+}
