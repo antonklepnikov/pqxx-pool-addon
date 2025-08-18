@@ -5,7 +5,9 @@ Napi::FunctionReference ConnectionPool::constructor;
 
 Napi::Object ConnectionPool::Init(Napi::Env env, Napi::Object exports) {
   Napi::HandleScope scope(env);
-  Napi::Function func = DefineClass(env, "ConnectionPool", {});
+  Napi::Function func = DefineClass(env, "ConnectionPool", {
+		InstanceMethod("getPoolStatus", &ConnectionPool::GetPoolStatus)
+	});
   constructor = Napi::Persistent(func);
   constructor.SuppressDestruct();
   exports.Set("ConnectionPool", func);
@@ -46,6 +48,11 @@ ConnectionPool::ConnectionPool(const Napi::CallbackInfo& info)
 		}
 		Napi::Error::New(env, errMessage + '\n').ThrowAsJavaScriptException();
 	} 
+}
+
+Napi::Value ConnectionPool::GetPoolStatus(const Napi::CallbackInfo& info) {
+	Napi::Env env = info.Env();
+	return Napi::String::New(env, connectionPool_->getPoolStatus());
 }
 
 pqxxplint::ConnectionPool* ConnectionPool::GetInternalInstance() {

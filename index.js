@@ -8,6 +8,7 @@ const connectionParams = {
 
 try {
   const pool = new pqxxPoolAddon.ConnectionPool(connectionParams);
+  console.log(pool.getPoolStatus());
 
   const tableTransaction = new pqxxPoolAddon.BasicTransaction(pool);
   tableTransaction.query(`DROP TABLE IF EXISTS test_users`);
@@ -23,15 +24,15 @@ try {
   const createUserTransaction = new pqxxPoolAddon.BasicTransaction(pool);
   const createUserParamsQuery = `
     INSERT INTO test_users (username, role) VALUES ($1, $2) RETURNING user_id`;
-  const userRes1 = createUserTransaction.query(
-    createUserParamsQuery,
-    "Antonk-1,Admin"
-  );
+  const userRes1 = createUserTransaction.query(createUserParamsQuery, [
+    "Antonk-1",
+    "Admin",
+  ]);
   console.log(`Created user with id: ${userRes1}`);
-  const userRes2 = createUserTransaction.query(
-    createUserParamsQuery,
-    "Antonk-2,Admin"
-  );
+  const userRes2 = createUserTransaction.query(createUserParamsQuery, [
+    "Antonk-2",
+    "User",
+  ]);
   console.log(`Created user with id: ${userRes2}`);
   const userRes3 = createUserTransaction.query(
     `INSERT INTO test_users (username) VALUES ('Antonk 3') RETURNING user_id`
@@ -43,6 +44,7 @@ try {
   const usersJsonString = readUsersTransaction.query(
     `SELECT * FROM test_users ORDER BY user_id ASC`
   );
+  //console.log(usersJsonString);
   console.log(JSON.parse(usersJsonString));
 } catch (err) {
   console.error(`SQL pool error: ${err.message}`);

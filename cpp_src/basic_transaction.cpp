@@ -49,19 +49,23 @@ Napi::Value BasicTransaction::Query(const Napi::CallbackInfo& info) {
   std::string query = info[0].As<Napi::String>().Utf8Value();   
   std::string res{};
   bool queryWithParams = false;
-  if (len == 2 && !info[1].IsString()) {
-    Napi::TypeError::New(env, "Params must be string").ThrowAsJavaScriptException();
-  }
-  if (len == 2 && info[1].IsString()) {
-    queryWithParams = true;
+  if (len == 2) {
+    if (!info[1].IsArray()) {
+      Napi::TypeError::New(env, "Params must be an array").ThrowAsJavaScriptException();
+    } else {
+      queryWithParams = true;
+    }
   }
   try {
-    if (!queryWithParams) {
-      res = this->basicTransaction_->query(query);
-    } else {
-      std::string params = info[1].As<Napi::String>().Utf8Value();
-      res = this->basicTransaction_->query(query, params);
+    std::vector<std::string> params{};
+    if (queryWithParams) {
+      Napi::Array arr = info[1].As<Napi::Array>();
+      std::size_t len = arr.Length();
+      for (std::size_t i = 0; i < len; ++i) {
+        params.emplace_back(static_cast<Napi::Value>(arr[i]).ToString().Utf8Value());
+      }
     }
+    res = this->basicTransaction_->query(query, params);
   } catch (const std::exception& err) {
     Napi::Error::New(env, err.what()).ThrowAsJavaScriptException();
   }

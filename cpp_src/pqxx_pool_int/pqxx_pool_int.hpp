@@ -3,8 +3,6 @@
 
 
 #include <pqxx/pqxx>
-#include "json.hpp"
-
 #include <mutex>
 #include <condition_variable>
 #include <queue>
@@ -71,9 +69,11 @@ namespace pqxxplint {
       std::mutex connectionsMutex{};
       std::condition_variable connectionsCond{};
       std::queue<ManagerPtr> connections{};
+      std::string statusMsg{"Error: there are no connections in the pool"};
     public:
       ConnectionPool(const ConnectionParams& params) {
-        for (int i = 0; i < params.poolSize; ++i) {
+        int poolSize = params.poolSize;
+        for (int i = 0; i < poolSize; ++i) {
           const std::string paramsString = {
             "dbname = " + params.dbName +
             " user = " + params.user +
@@ -85,6 +85,9 @@ namespace pqxxplint {
           ManagerPtr manager = std::make_unique<ConnectionManager>(connection);
           connections.push(std::move(manager));
         }
+        statusMsg = "SQL: " + 
+          std::to_string(poolSize) + " connections have been established to database " + 
+          "\"" + params.hostAddr + ":" + params.port + "\\" + params.dbName + "\"" + '\n';
       }
       ManagerPtr borrowConnection() {
         std::unique_lock lock(connectionsMutex);
@@ -100,7 +103,7 @@ namespace pqxxplint {
         }
         connectionsCond.notify_one();
       }
-      
+      std::string getPoolStatus() { return statusMsg; }
   };
 
   
@@ -132,37 +135,23 @@ namespace pqxxplint {
     private:
       std::string queryString;
       pqxx::work& transactionView;
-      std::vector<std::string> splitParams(std::string params) {
-        std::vector<std::string> tokens{};
-        std::size_t pos = 0;
-        std::string token{};
-        while ((pos = params.find(',')) != std::string::npos) {
-          token = params.substr(0, pos);
-          tokens.push_back(token);
-          params.erase(0, pos + 1);
-        }
-        tokens.push_back(params);
-        return tokens;
-      }
       std::string convertResultToJsonString(pqxx::result in) {
         const int columns = in.columns();
-        nlohmann::json out{};
+        const int rows = in.size();
+        std::string out{"["};
         for (auto const &row: in) {
-          std::string tmp{"{\""};
+          const int rowNum = row.num() + 1;
+          out += "{\"";
           for (auto const &field: row) {
             const int columnNum = field.num() + 1;
-              tmp += field.name();
-              tmp += "\":\"";
-              tmp += field.c_str();
-              tmp += columns - columnNum == 0 ? "" : "\",\"";
+              out += field.name();
+              out += "\":\"";
+              out += field.c_str();
+              out += columns - columnNum == 0 ? "" : "\",\"";
           }
-          tmp += "\"}";
-          out.emplace_back(nlohmann::json::parse(tmp));
+          out += rows - rowNum == 0 ? "\"}" : "\"},";
         }
-        if (out.is_null()) {
-          return "[]";
-        }
-        return out.dump();
+        return out += ']';
       }
     public:
       Query(std::string_view str, pqxx::work& txView)
@@ -176,18 +165,18 @@ namespace pqxxplint {
       operator std::string_view() const {
         return { queryString.data(), queryString.size() };
       }
-      std::string exec(std::string& params) {
-        pqxx::params prms{};
-        if (params != "") {
-          std::vector<std::string> tokens = splitParams(params);
-          for (const std::string& t: tokens) {
-            prms.append(t);
+      std::string exec(const std::vector<std::string>& params) {
+        pqxx::params execParams{};
+        if (!params.empty()) {
+          // std::vector<std::string> tokens = splitParams(params);
+          for (const std::string& p: params) {
+            execParams.append(p);
           }
         }
-        pqxx::result res = transactionView.exec_params(queryString, prms);
+        pqxx::result res = transactionView.exec_params(queryString, execParams);
         return convertResultToJsonString(res);
       }
-      std::string operator()(std::string& params) {
+      std::string operator()(const std::vector<std::string>& params) {
         return exec(params);
       }
   };
@@ -206,8 +195,8 @@ namespace pqxxplint {
       BasicTransaction& operator=(const BasicTransaction&) = delete;
       pqxx::work& get() { return transaction; }
       operator pqxx::work&() { return get(); }
-      std::string query(std::string query, std::string params = "") {
-        std::string res{"[]"};
+      std::string query(std::string query, const std::vector<std::string>& params) {
+        std::string res{};
         try {
           pqxxplint::Query q(query, this->get());
           res = q(params);

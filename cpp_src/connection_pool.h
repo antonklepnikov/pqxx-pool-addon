@@ -13,6 +13,7 @@ class ConnectionPool : public Napi::ObjectWrap<ConnectionPool> {
   public:
     static Napi::Object Init(Napi::Env env, Napi::Object exports);
     ConnectionPool(const Napi::CallbackInfo& info);
+    Napi::Value GetPoolStatus(const Napi::CallbackInfo& info);
     pqxxplint::ConnectionPool* GetInternalInstance();
 };
 
