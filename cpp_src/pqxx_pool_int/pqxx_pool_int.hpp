@@ -135,24 +135,24 @@ namespace pqxxplint {
     private:
       std::string queryString;
       pqxx::work& transactionView;
-      std::string convertResultToJsonString(pqxx::result in) {
-        const int columns = in.columns();
-        const int rows = in.size();
-        std::string out{"["};
-        for (auto const &row: in) {
-          const int rowNum = row.num() + 1;
-          out += "{\"";
-          for (auto const &field: row) {
-            const int columnNum = field.num() + 1;
-              out += field.name();
-              out += "\":\"";
-              out += field.c_str();
-              out += columns - columnNum == 0 ? "" : "\",\"";
-          }
-          out += rows - rowNum == 0 ? "\"}" : "\"},";
-        }
-        return out += ']';
-      }
+      // std::string convertResultToJsonString(pqxx::result in) {
+      //   const int columns = in.columns();
+      //   const int rows = in.size();
+      //   std::string out{"["};
+      //   for (auto const &row: in) {
+      //     const int rowNum = row.num() + 1;
+      //     out += "{\"";
+      //     for (auto const &field: row) {
+      //       const int columnNum = field.num() + 1;
+      //         out += field.name();
+      //         out += "\":\"";
+      //         out += field.c_str();
+      //         out += columns - columnNum == 0 ? "" : "\",\"";
+      //     }
+      //     out += rows - rowNum == 0 ? "\"}" : "\"},";
+      //   }
+      //   return out += ']';
+      // }
     public:
       Query(std::string_view str, pqxx::work& txView)
         : queryString(str), transactionView(txView) {}
@@ -165,19 +165,16 @@ namespace pqxxplint {
       operator std::string_view() const {
         return { queryString.data(), queryString.size() };
       }
-      std::string exec(const std::vector<std::string>& params) {
-        pqxx::params execParams{};
-        if (!params.empty()) {
-          // std::vector<std::string> tokens = splitParams(params);
+      pqxx::result operator()(const std::vector<std::string>& params) {
+        if (params.empty()) {
+          return transactionView.exec(queryString);
+        } else {
+          pqxx::params ps{};
           for (const std::string& p: params) {
-            execParams.append(p);
+            ps.append(p);
           }
+          return transactionView.exec_params(queryString, ps);
         }
-        pqxx::result res = transactionView.exec_params(queryString, execParams);
-        return convertResultToJsonString(res);
-      }
-      std::string operator()(const std::vector<std::string>& params) {
-        return exec(params);
       }
   };
 
@@ -195,15 +192,13 @@ namespace pqxxplint {
       BasicTransaction& operator=(const BasicTransaction&) = delete;
       pqxx::work& get() { return transaction; }
       operator pqxx::work&() { return get(); }
-      std::string query(std::string query, const std::vector<std::string>& params) {
-        std::string res{};
+      pqxx::result query(std::string query, const std::vector<std::string>& params) {
         try {
           pqxxplint::Query q(query, this->get());
-          res = q(params);
+          return q(params);
         } catch (std::exception& err) {
-        throw;
+          throw;
         }
-        return res;
       }
       void commit() { transaction.commit(); }
   };

@@ -1,8 +1,4 @@
-#include "connection_pool.h"
 #include "basic_transaction.h"
-
-
-#include <iostream>
 
 Napi::FunctionReference BasicTransaction::constructor;
 
@@ -47,7 +43,6 @@ Napi::Value BasicTransaction::Query(const Napi::CallbackInfo& info) {
     Napi::TypeError::New(env, "Query string expected").ThrowAsJavaScriptException();
   }
   std::string query = info[0].As<Napi::String>().Utf8Value();   
-  std::string res{};
   bool queryWithParams = false;
   if (len == 2) {
     if (!info[1].IsArray()) {
@@ -65,9 +60,68 @@ Napi::Value BasicTransaction::Query(const Napi::CallbackInfo& info) {
         params.emplace_back(static_cast<Napi::Value>(arr[i]).ToString().Utf8Value());
       }
     }
-    res = this->basicTransaction_->query(query, params);
+    const pqxx::result res = this->basicTransaction_->query(query, params);
+    return convertPqxxResult(env, res);
   } catch (const std::exception& err) {
     Napi::Error::New(env, err.what()).ThrowAsJavaScriptException();
   }
-  return Napi::String::New(info.Env(), res);
+  return env.Null();
+}
+
+Napi::Value BasicTransaction::convertPqxxField(const Napi::Env& env, const pqxx::field& field) {
+  const pqxx::oid oid = field.type();
+  try {
+    // Compatibility is guaranteed only with Postgresql 16! 
+    switch (oid) {
+      case 16: // bool
+        return Napi::Boolean::New(env, field.as<bool>());
+      case 17: // bytea
+        return Napi::Buffer<char>::Copy(env, field.c_str(), sizeof(field.c_str()));
+      case 21: // int2
+        return Napi::Number::New(env, field.as<short>());
+      case 23: // int4
+        return Napi::Number::New(env, field.as<int>());
+      case 20: // int8
+        return Napi::Number::New(env, field.as<long>());
+      case 700: // float4
+        return Napi::Number::New(env, field.as<float>());
+      case 701: // int4
+        return Napi::Number::New(env, field.as<double>());
+      default:
+        return Napi::String::New(env, field.c_str());
+    }
+  } catch (const std::exception& e) {
+      // If conversion filed, return string
+      return Napi::String::New(env, field.c_str());
+  }
+}
+
+Napi::Value BasicTransaction::convertPqxxResult(
+  const Napi::Env& env,
+  const pqxx::result& result
+) {
+  try {
+    const pqxx::result::size_type resSize = result.size();
+    Napi::Array jsRes = Napi::Array::New(env, resSize);
+    for (pqxx::result::size_type i = 0; i < resSize; ++i) {
+      const pqxx::row& row = result[i];
+      const pqxx::row::size_type rowSize = row.size();
+      Napi::Object jsRow = Napi::Object::New(env);
+      for (pqxx::row::size_type j = 0; j < rowSize; ++j) {
+        const pqxx::field& field = row[j];
+        std::string columnName = result.column_name(j);
+        if (field.is_null()) {
+          jsRow.Set(columnName, env.Null());
+        } else {
+          Napi::Value jsValue = convertPqxxField(env, field);
+          jsRow.Set(columnName, jsValue);
+        }
+      }
+      jsRes.Set(i, jsRow);
+    }
+    return jsRes;
+  } catch (std::exception& err) {
+    Napi::Error::New(env, err.what()).ThrowAsJavaScriptException();
+  }
+  return env.Null();
 }
