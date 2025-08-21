@@ -85,9 +85,9 @@ namespace pqxxplint {
           ManagerPtr manager = std::make_unique<ConnectionManager>(connection);
           connections.push(std::move(manager));
         }
-        statusMsg = "SQL: " + 
+        statusMsg = "PQXX pool: " + 
           std::to_string(poolSize) + " connections have been established to database " + 
-          "\"" + params.hostAddr + ":" + params.port + "\\" + params.dbName + "\"" + '\n';
+          "\"" + params.hostAddr + ":" + params.port + "\\" + params.dbName + "\"";
       }
       ManagerPtr borrowConnection() {
         std::unique_lock lock(connectionsMutex);
@@ -135,24 +135,6 @@ namespace pqxxplint {
     private:
       std::string queryString;
       pqxx::work& transactionView;
-      // std::string convertResultToJsonString(pqxx::result in) {
-      //   const int columns = in.columns();
-      //   const int rows = in.size();
-      //   std::string out{"["};
-      //   for (auto const &row: in) {
-      //     const int rowNum = row.num() + 1;
-      //     out += "{\"";
-      //     for (auto const &field: row) {
-      //       const int columnNum = field.num() + 1;
-      //         out += field.name();
-      //         out += "\":\"";
-      //         out += field.c_str();
-      //         out += columns - columnNum == 0 ? "" : "\",\"";
-      //     }
-      //     out += rows - rowNum == 0 ? "\"}" : "\"},";
-      //   }
-      //   return out += ']';
-      // }
     public:
       Query(std::string_view str, pqxx::work& txView)
         : queryString(str), transactionView(txView) {}
